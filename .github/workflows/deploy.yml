@@ -3,6 +3,9 @@ name: Build and deploy AI Brief Hub
 on:
   push:
     branches: [main]
+  schedule:
+    # GitHub Actions cron uses UTC: 20:12 Asia/Shanghai = 12:12 UTC.
+    - cron: "12 12 * * *"
   workflow_dispatch:
 
 permissions:

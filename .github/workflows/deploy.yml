@@ -166,18 +166,56 @@ jobs:
           fi
 
           if [[ "$REPORT_FOUND" == "true" && -n "$DETAIL_URL" ]]; then
-            report_lines="${REPORT_LABEL}：${DETAIL_URL}\nMarkdown：${MARKDOWN_URL}\n文件路径：${MARKDOWN_PATH}\n"
+            payload="$(jq -n \
+              --arg title "$title" \
+              --arg status "$status" \
+              --arg label "$REPORT_LABEL" \
+              --arg detail "$DETAIL_URL" \
+              --arg markdown "$MARKDOWN_URL" \
+              --arg path "$MARKDOWN_PATH" \
+              --arg site "$site_url" \
+              --arg workflow "$workflow_url" \
+              '{
+                msg_type:"post",
+                content:{
+                  post:{
+                    zh_cn:{
+                      title:$title,
+                      content:[
+                        [{tag:"text",text:$status}],
+                        [{tag:"text",text:($label+"：")},{tag:"a",text:"打开报告",href:$detail}],
+                        [{tag:"text",text:"Markdown："},{tag:"a",text:"查看源文件",href:$markdown}],
+                        [{tag:"text",text:("文件路径："+$path)}],
+                        [{tag:"text",text:"站点首页："},{tag:"a",text:"打开 AI Brief Hub",href:$site}],
+                        [{tag:"text",text:"Workflow："},{tag:"a",text:"查看构建记录",href:$workflow}]
+                      ]
+                    }
+                  }
+                }
+              }')"
           else
-            report_lines="本次未找到可发布的 Markdown 报告\n"
+            payload="$(jq -n \
+              --arg title "$title" \
+              --arg status "$status" \
+              --arg site "$site_url" \
+              --arg workflow "$workflow_url" \
+              '{
+                msg_type:"post",
+                content:{
+                  post:{
+                    zh_cn:{
+                      title:$title,
+                      content:[
+                        [{tag:"text",text:$status}],
+                        [{tag:"text",text:"本次未找到可发布的 Markdown 报告"}],
+                        [{tag:"text",text:"站点首页："},{tag:"a",text:"打开 AI Brief Hub",href:$site}],
+                        [{tag:"text",text:"Workflow："},{tag:"a",text:"查看构建记录",href:$workflow}]
+                      ]
+                    }
+                  }
+                }
+              }')"
           fi
-
-          payload="$(jq -n \
-            --arg title "$title" \
-            --arg status "$status" \
-            --arg report "$report_lines" \
-            --arg site "$site_url" \
-            --arg workflow "$workflow_url" \
-            '{msg_type:"text",content:{text:($title+"\n"+$status+"\n"+$report+"站点首页："+$site+"\nWorkflow："+$workflow)}}')"
 
           curl --fail --silent --show-error \
             -X POST \

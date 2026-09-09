@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ description or site.description }}">
+    <title>{{ title }}{% if title != site.title %} · {{ site.title }}{% endif %}</title>
+    <link rel="stylesheet" href="{{ '/assets/style.css' | url }}">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="{{ '/' | url }}">{{ site.title }}</a>
+      <nav aria-label="主导航">
+        <a href="{{ '/' | url }}">首页</a>
+        <a href="{{ '/archive/' | url }}">归档</a>
+        <a href="{{ '/search/' | url }}">搜索</a>
+      </nav>
+    </header>
+    <main>{{ content | safe }}</main>
+    <footer>AI Brief Hub · Markdown 驱动的私人情报库</footer>
+  </body>
+</html>
+

@@ -1,0 +1,126 @@
+name: Build and deploy AI Brief Hub
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      markdown_url: ${{ steps.metadata.outputs.markdown_url }}
+      markdown_path: ${{ steps.metadata.outputs.markdown_path }}
+      site_url: ${{ steps.pages.outputs.base_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Find changed Markdown
+        id: metadata
+        shell: bash
+        run: |
+          markdown_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | awk '/^content\/.*\.md$/ { print; exit }')"
+          if [[ -n "$markdown_path" ]]; then
+            markdown_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/${markdown_path}"
+          else
+            markdown_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/content"
+            markdown_path="content/"
+          fi
+          echo "markdown_path=$markdown_path" >> "$GITHUB_OUTPUT"
+          echo "markdown_url=$markdown_url" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build site and search index
+        env:
+          PATH_PREFIX: ${{ steps.pages.outputs.base_path }}
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  notify:
+    if: always()
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Feishu
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          DEPLOYED_PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+          CONFIGURED_SITE_URL: ${{ needs.build.outputs.site_url }}
+          MARKDOWN_URL: ${{ needs.build.outputs.markdown_url }}
+          MARKDOWN_PATH: ${{ needs.build.outputs.markdown_path }}
+        shell: bash
+        run: |
+          if [[ -z "$FEISHU_WEBHOOK_URL" ]]; then
+            echo "FEISHU_WEBHOOK_URL is not configured; notification skipped."
+            exit 0
+          fi
+
+          site_url="${DEPLOYED_PAGE_URL:-$CONFIGURED_SITE_URL}"
+          markdown_url="${MARKDOWN_URL:-${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/content}"
+          workflow_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          if [[ "$BUILD_RESULT" == "success" && "$DEPLOY_RESULT" == "success" ]]; then
+            title="✅ AI Brief Hub 发布成功"
+            status="构建和部署均已完成"
+          else
+            title="❌ AI Brief Hub 发布失败"
+            status="build=${BUILD_RESULT}, deploy=${DEPLOY_RESULT}"
+          fi
+
+          payload="$(jq -n \
+            --arg title "$title" \
+            --arg status "$status" \
+            --arg site "$site_url" \
+            --arg markdown "$markdown_url" \
+            --arg workflow "$workflow_url" \
+            --arg path "$MARKDOWN_PATH" \
+            '{msg_type:"text",content:{text:($title+"\n"+$status+"\n网页："+$site+"\nMarkdown："+$markdown+"\n文件："+$path+"\nWorkflow："+$workflow)}}')"
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data "$payload" \
+            "$FEISHU_WEBHOOK_URL"

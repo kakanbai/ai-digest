@@ -1,0 +1,24 @@
+---
+layout: layouts/base.njk
+title: 历史归档
+permalink: archive/index.html
+---
+<section class="page-intro">
+  <p class="eyebrow">ARCHIVE</p>
+  <h1>历史归档</h1>
+  <p>按时间浏览所有已发布的情报报告。</p>
+</section>
+{% if collections.digests.length %}
+  <ol class="archive-list">
+    {% for post in collections.digests %}
+      <li>
+        <time>{{ post.date | readableDate }}</time>
+        <span class="pill">{{ post.data.type | typeLabel }}</span>
+        <a href="{{ post.url | url }}">{{ post.data.title }}</a>
+      </li>
+    {% endfor %}
+  </ol>
+{% else %}
+  <div class="empty-state"><p>尚无报告。PoC 写入第一篇 Markdown 后，这里会自动更新。</p></div>
+{% endif %}
+

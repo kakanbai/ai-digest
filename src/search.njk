@@ -1,0 +1,22 @@
+---
+layout: layouts/base.njk
+title: 全文搜索
+permalink: search/index.html
+---
+<section class="page-intro">
+  <p class="eyebrow">SEARCH</p>
+  <h1>全文搜索</h1>
+  <p>搜索标题、摘要、正文和标签，无需数据库。</p>
+</section>
+<link href="{{ '/pagefind/pagefind-ui.css' | url }}" rel="stylesheet">
+<script src="{{ '/pagefind/pagefind-ui.js' | url }}"></script>
+<div id="search" class="search-panel"></div>
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get("q") || "";
+    const ui = new PagefindUI({ element: "#search", showSubResults: true, excerptLength: 24 });
+    if (query) ui.triggerSearch(query);
+  });
+</script>
+

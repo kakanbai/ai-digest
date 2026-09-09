@@ -1,0 +1,15 @@
+---
+layout: layouts/base.njk
+---
+<article class="digest" data-pagefind-body>
+  <div class="eyebrow">{{ type | typeLabel }} · {{ date | readableDate }}</div>
+  <h1 data-pagefind-meta="title">{{ title }}</h1>
+  {% if summary %}<p class="lede" data-pagefind-meta="summary">{{ summary }}</p>{% endif %}
+  {% if tags %}
+    <ul class="tags" aria-label="标签">
+      {% for tag in tags %}<li data-pagefind-filter="tag">{{ tag }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  <div class="prose">{{ content | safe }}</div>
+</article>
+

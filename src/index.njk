@@ -1,0 +1,39 @@
+---
+layout: layouts/base.njk
+title: AI Brief Hub
+description: 自动研究、每日归档、永久可搜索的个人 AI 情报中心
+permalink: index.html
+---
+<section class="hero">
+  <p class="eyebrow">PERSONAL INTELLIGENCE DATABASE</p>
+  <h1>把每天的信息噪声，沉淀成可检索的判断。</h1>
+  <p>AI、市场、GitHub 与专题研究统一保存为 Markdown，由 Eleventy 发布，并用 Pagefind 建立全文索引。</p>
+  <form class="search-jump" action="{{ '/search/' | url }}">
+    <input name="q" aria-label="搜索词" placeholder="搜索 Claude Code、MCP、NVIDIA…">
+    <button type="submit">搜索历史</button>
+  </form>
+</section>
+
+<section>
+  <div class="section-heading">
+    <div><p class="eyebrow">LATEST</p><h2>最新报告</h2></div>
+    <a href="{{ '/archive/' | url }}">查看全部 →</a>
+  </div>
+  {% if collections.digests.length %}
+    <div class="cards">
+      {% for post in collections.digests | limit(9) %}
+        <article class="card">
+          <div class="eyebrow">{{ post.data.type | typeLabel }} · {{ post.date | readableDate }}</div>
+          <h3><a href="{{ post.url | url }}">{{ post.data.title }}</a></h3>
+          <p>{{ post.data.summary or "打开阅读完整报告。" }}</p>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>内容入口已经就绪</h3>
+      <p>第一篇 Markdown 写入 <code>content/</code> 后，会自动出现在这里并进入全文索引。</p>
+    </div>
+  {% endif %}
+</section>
+

@@ -1,0 +1,19 @@
+{
+  "name": "ai-digest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A searchable AI intelligence archive built with Eleventy and Pagefind.",
+  "type": "module",
+  "scripts": {
+    "clean": "node -e \"import('node:fs').then(fs => fs.rmSync('_site', { recursive: true, force: true }))\"",
+    "build:site": "eleventy",
+    "build:search": "pagefind --site _site",
+    "build": "npm run clean && npm run build:site && npm run build:search",
+    "serve": "eleventy --serve"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.1.2",
+    "pagefind": "^1.4.0"
+  }
+}
+

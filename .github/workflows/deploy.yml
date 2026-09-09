@@ -23,6 +23,7 @@ jobs:
     outputs:
       markdown_url: ${{ steps.metadata.outputs.markdown_url }}
       markdown_path: ${{ steps.metadata.outputs.markdown_path }}
+      detail_url: ${{ steps.metadata.outputs.detail_url }}
       site_url: ${{ steps.pages.outputs.base_url }}
     steps:
       - name: Check out repository
@@ -45,16 +46,32 @@ jobs:
       - name: Find changed Markdown
         id: metadata
         shell: bash
+        env:
+          SITE_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
           markdown_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | awk '/^content\/.*\.md$/ { print; exit }')"
+          detail_url="$SITE_BASE_URL"
+
           if [[ -n "$markdown_path" ]]; then
             markdown_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/${markdown_path}"
+
+            if [[ -f "$markdown_path" ]]; then
+              permalink="$(awk -F': ' '/^permalink:/ { print $2; exit }' "$markdown_path" | tr -d '\r\"')"
+              if [[ -n "$permalink" ]]; then
+                if [[ "$permalink" != /* ]]; then
+                  permalink="/$permalink"
+                fi
+                detail_url="${SITE_BASE_URL%/}${permalink}"
+              fi
+            fi
           else
             markdown_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/content"
             markdown_path="content/"
           fi
+
           echo "markdown_path=$markdown_path" >> "$GITHUB_OUTPUT"
           echo "markdown_url=$markdown_url" >> "$GITHUB_OUTPUT"
+          echo "detail_url=$detail_url" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm ci
@@ -94,6 +111,7 @@ jobs:
           DEPLOY_RESULT: ${{ needs.deploy.result }}
           DEPLOYED_PAGE_URL: ${{ needs.deploy.outputs.page_url }}
           CONFIGURED_SITE_URL: ${{ needs.build.outputs.site_url }}
+          DETAIL_URL: ${{ needs.build.outputs.detail_url }}
           MARKDOWN_URL: ${{ needs.build.outputs.markdown_url }}
           MARKDOWN_PATH: ${{ needs.build.outputs.markdown_path }}
         shell: bash
@@ -104,6 +122,7 @@ jobs:
           fi
 
           site_url="${DEPLOYED_PAGE_URL:-$CONFIGURED_SITE_URL}"
+          detail_url="${DETAIL_URL:-$site_url}"
           markdown_url="${MARKDOWN_URL:-${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/content}"
           workflow_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
@@ -118,11 +137,12 @@ jobs:
           payload="$(jq -n \
             --arg title "$title" \
             --arg status "$status" \
+            --arg detail "$detail_url" \
             --arg site "$site_url" \
             --arg markdown "$markdown_url" \
             --arg workflow "$workflow_url" \
             --arg path "$MARKDOWN_PATH" \
-            '{msg_type:"text",content:{text:($title+"\n"+$status+"\n网页："+$site+"\nMarkdown："+$markdown+"\n文件："+$path+"\nWorkflow："+$workflow)}}')"
+            '{msg_type:"text",content:{text:($title+"\n"+$status+"\n今日报告："+$detail+"\n站点首页："+$site+"\nMarkdown："+$markdown+"\n文件路径："+$path+"\nWorkflow："+$workflow)}}')"
 
           curl --fail --silent --show-error \
             -X POST \

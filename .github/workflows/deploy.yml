@@ -24,12 +24,14 @@ jobs:
       markdown_url: ${{ steps.metadata.outputs.markdown_url }}
       markdown_path: ${{ steps.metadata.outputs.markdown_path }}
       detail_url: ${{ steps.metadata.outputs.detail_url }}
+      report_label: ${{ steps.metadata.outputs.report_label }}
+      report_found: ${{ steps.metadata.outputs.report_found }}
       site_url: ${{ steps.pages.outputs.base_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -43,35 +45,51 @@ jobs:
         with:
           enablement: true
 
-      - name: Find changed Markdown
+      - name: Resolve report metadata
         id: metadata
         shell: bash
         env:
           SITE_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
+          # Prefer a Markdown report changed by this commit.
           markdown_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | awk '/^content\/.*\.md$/ { print; exit }')"
-          detail_url="$SITE_BASE_URL"
 
-          if [[ -n "$markdown_path" ]]; then
+          # For workflow/template-only deployments, fall back to the most recently
+          # committed report so Feishu never mistakes the site homepage for a report.
+          if [[ -z "$markdown_path" ]]; then
+            markdown_path="$(git log --name-only --pretty=format: -- content | awk '/^content\/.*\.md$/ { print; exit }')"
+          fi
+
+          report_found="false"
+          report_label="最新报告"
+          markdown_url=""
+          detail_url=""
+
+          if [[ -n "$markdown_path" && -f "$markdown_path" ]]; then
+            report_found="true"
             markdown_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/${markdown_path}"
 
-            if [[ -f "$markdown_path" ]]; then
-              permalink="$(awk -F': ' '/^permalink:/ { print $2; exit }' "$markdown_path" | tr -d '\r\"')"
-              if [[ -n "$permalink" ]]; then
-                if [[ "$permalink" != /* ]]; then
-                  permalink="/$permalink"
-                fi
-                detail_url="${SITE_BASE_URL%/}${permalink}"
+            permalink="$(awk -F': ' '/^permalink:/ { print $2; exit }' "$markdown_path" | tr -d '\r\"')"
+            report_date="$(awk -F': ' '/^date:/ { print $2; exit }' "$markdown_path" | tr -d '\r\"')"
+            today_shanghai="$(TZ=Asia/Shanghai date +%F)"
+
+            if [[ -n "$permalink" ]]; then
+              if [[ "$permalink" != /* ]]; then
+                permalink="/$permalink"
               fi
+              detail_url="${SITE_BASE_URL%/}${permalink}"
             fi
-          else
-            markdown_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/content"
-            markdown_path="content/"
+
+            if [[ "$report_date" == "$today_shanghai" ]]; then
+              report_label="今日报告"
+            fi
           fi
 
           echo "markdown_path=$markdown_path" >> "$GITHUB_OUTPUT"
           echo "markdown_url=$markdown_url" >> "$GITHUB_OUTPUT"
           echo "detail_url=$detail_url" >> "$GITHUB_OUTPUT"
+          echo "report_label=$report_label" >> "$GITHUB_OUTPUT"
+          echo "report_found=$report_found" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm ci
@@ -112,6 +130,8 @@ jobs:
           DEPLOYED_PAGE_URL: ${{ needs.deploy.outputs.page_url }}
           CONFIGURED_SITE_URL: ${{ needs.build.outputs.site_url }}
           DETAIL_URL: ${{ needs.build.outputs.detail_url }}
+          REPORT_LABEL: ${{ needs.build.outputs.report_label }}
+          REPORT_FOUND: ${{ needs.build.outputs.report_found }}
           MARKDOWN_URL: ${{ needs.build.outputs.markdown_url }}
           MARKDOWN_PATH: ${{ needs.build.outputs.markdown_path }}
         shell: bash
@@ -122,8 +142,6 @@ jobs:
           fi
 
           site_url="${DEPLOYED_PAGE_URL:-$CONFIGURED_SITE_URL}"
-          detail_url="${DETAIL_URL:-$site_url}"
-          markdown_url="${MARKDOWN_URL:-${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/content}"
           workflow_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
           if [[ "$BUILD_RESULT" == "success" && "$DEPLOY_RESULT" == "success" ]]; then
@@ -134,15 +152,19 @@ jobs:
             status="build=${BUILD_RESULT}, deploy=${DEPLOY_RESULT}"
           fi
 
+          if [[ "$REPORT_FOUND" == "true" && -n "$DETAIL_URL" ]]; then
+            report_lines="${REPORT_LABEL}：${DETAIL_URL}\nMarkdown：${MARKDOWN_URL}\n文件路径：${MARKDOWN_PATH}\n"
+          else
+            report_lines="本次未找到可发布的 Markdown 报告\n"
+          fi
+
           payload="$(jq -n \
             --arg title "$title" \
             --arg status "$status" \
-            --arg detail "$detail_url" \
+            --arg report "$report_lines" \
             --arg site "$site_url" \
-            --arg markdown "$markdown_url" \
             --arg workflow "$workflow_url" \
-            --arg path "$MARKDOWN_PATH" \
-            '{msg_type:"text",content:{text:($title+"\n"+$status+"\n今日报告："+$detail+"\n站点首页："+$site+"\nMarkdown："+$markdown+"\n文件路径："+$path+"\nWorkflow："+$workflow)}}')"
+            '{msg_type:"text",content:{text:($title+"\n"+$status+"\n"+$report+"站点首页："+$site+"\nWorkflow："+$workflow)}}')"
 
           curl --fail --silent --show-error \
             -X POST \

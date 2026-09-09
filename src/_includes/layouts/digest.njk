@@ -10,6 +10,6 @@ layout: layouts/base.njk
       {% for tag in tags %}<li data-pagefind-filter="tag">{{ tag }}</li>{% endfor %}
     </ul>
   {% endif %}
-  <div class="prose">{{ content | safe }}</div>
+  {% set duplicateTitle = '<h1>' ~ title ~ '</h1>' %}
+  <div class="prose">{{ content | replace(duplicateTitle, '') | safe }}</div>
 </article>
-

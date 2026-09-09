@@ -51,13 +51,26 @@ jobs:
         env:
           SITE_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
-          # Prefer a Markdown report changed by this commit.
-          markdown_path="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | awk '/^content\/.*\.md$/ { print; exit }')"
+          markdown_path=""
 
-          # For workflow/template-only deployments, fall back to the most recently
-          # committed report so Feishu never mistakes the site homepage for a report.
+          # Prefer a Markdown report changed by this commit, without using a
+          # short-circuiting pipeline that can fail under bash pipefail.
+          while IFS= read -r path; do
+            if [[ "$path" =~ ^content/.*\.md$ ]]; then
+              markdown_path="$path"
+              break
+            fi
+          done < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")
+
+          # For workflow/template-only deployments, use the most recently
+          # committed report from repository history.
           if [[ -z "$markdown_path" ]]; then
-            markdown_path="$(git log --name-only --pretty=format: -- content | awk '/^content\/.*\.md$/ { print; exit }')"
+            while IFS= read -r path; do
+              if [[ "$path" =~ ^content/.*\.md$ ]]; then
+                markdown_path="$path"
+                break
+              fi
+            done < <(git log --name-only --pretty=format: -- content)
           fi
 
           report_found="false"
